@@ -4,10 +4,14 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 export default NextAuth({
+  session:{
+    jwt:true
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      idToken:true
     }),
   ],
   callbacks: {
@@ -15,19 +19,13 @@ export default NextAuth({
       if (email && email.verificationRequest) return true;
       return true;
     },
-    async jwt({ token, user, account }) {
-      if (account) {
-        token.id_token = account.id_token;
-      }
-      return token;
-    },
     async session({ session, token, user }) {
-      session.user.name = session.user.name || session.user.email || "";
-      session.user.image = session.user.image || "";
-      session.id_token = token.id_token;
+      session.user.id = user?.id;
+      session.user.name = session.user?.name || session.user?.email || "";
+      session.user.image = session.user?.image || "";
+      session.id_token = token?.id_token;
       return session;
     },
   },
   debug: true,
-  secret: process.env.JWT_SECRET,
 });

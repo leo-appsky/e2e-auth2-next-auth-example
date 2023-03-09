@@ -22,7 +22,7 @@ Your `.env` file should look something like this:
 ```
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-NEXTAUTH_URL=http://localhost:3000 
+NEXT_AUTH_URL=http://localhost:3000 
 JWT_SECRET=your_JSON_web_token_secret
 ```
 
@@ -45,6 +45,8 @@ It should have this structure,you just need to replace the values with your Gmai
 {
   "GOOGLE_USER": "your_email@gmail.com",
   "GOOGLE_PSWD": "your_secret_password",
+  "COOKIE_NAME": "next-auth.session-token",
+  "SITE_NAME": "http://localhost:3000"
 }
 ```
 
@@ -67,6 +69,7 @@ export default NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      idToken:true
     }),
   ],
   callbacks: {
@@ -74,89 +77,69 @@ export default NextAuth({
       if (email && email.verificationRequest) return true;
       return true;
     },
-    async jwt({ token, user, account }) {
-      if (account) {
-        token.id_token = account.id_token;
-      }
-      return token;
-    },
     async session({ session, token, user }) {
+      session.user.id = user.id;
       session.user.name = session.user.name || session.user.email || "";
-      session.user.image = session.user.image || "";
+      session.user.image = session.user.image || defaultAvatar;
       session.id_token = token.id_token;
       return session;
     },
   },
   debug: true,
-  secret: process.env.JWT_SECRET,
 });
-
 ```
 
-So based in this [youtube video](https://www.youtube.com/watch?v=Fohrq5GZSD8) of the official documentation of Cypress in order to save and persists a
-sessions we should use [cy.session()](https://docs.cypress.io/api/commands/session) in conjunction with [cy.origin()](https://docs.cypress.io/api/commands/origin) so I created a custom Cypess command to Authenticate the Users using Google OAuth 2.0 API but if I implement `cy.session()` Next-Auth will throw an error that says: `https://next-auth.js.org/errors#oauth_callback_error id_token not present in TokenSet` as part of the Google Provider.
+So based in this [npm Cypress Plugin](https://www.npmjs.com/package/cypress-social-logins) of the official [documentation of Cypress](https://next-auth.js.org/tutorials/testing-with-cypress) in order to save and persists a
+sessions so I created a custom Cypess command to Authenticate the Users using Google OAuth 2.0 API but its throwing an error about time out exceed.The error says: `cy.task('GoogleSocialLogin') timed out after waiting 60000ms.`.
+If you comment the `cy.session()` the error says: ` waiting for selector "input#identifierId[type="email"]" failed: timeout 30000ms exceeded`
 
 This is my custom Cypress command:
 
 ```js
 Cypress.Commands.add("loginWithGmail", () => {
-  Cypress.log({
-    name: "loginViaGmail",
-  });
-  cy.visit('/login')
-  cy.contains("Sign In").click();
-     //cy.session('login',()=>{
-       cy.request("/api/auth/csrf").then((resp) => {
-         const csrfToken = resp.body.csrfToken;
-         cy.request({
-           method: "POST",
-           url: "/api/auth/callback/google",
-           form: true,
-           body: {
-             csrfToken: csrfToken,
-             json: true,
-             callbackUrl: "/",
-           },
-         }).then(() => {
-           cy.origin("accounts.google.com", () => {
-             cy.get('input[type="email"]', { timeout: 26000 }).type(
-               Cypress.env("GOOGLE_USER")
-             );
-             cy.get("button", { timeout: 26000 }).eq(3).click();
-             cy.wait(2000);
-             Cypress.on("uncaught:exception", (error, runnable) => {
-               Cypress.log({
-                 error,
-               });
-               return !error.message.includes(
-                 "ResizeObserver loop limit exceeded"
-               );
-             });
-             cy.get('input[name="password"]', { timeout: 26000 }).type(
-               Cypress.env("GOOGLE_PSWD")
-             );
-             cy.wait(2000);
-             cy.get('input[type="checkbox"]', { timeout: 26000 }).check();
-             Cypress.on("uncaught:exception", (error, runnable) => {
-               Cypress.log({
-                 error,
-               });
-               return !error.message.includes(
-                 "ResizeObserver loop limit exceeded"
-               );
-             });
-             cy.wait(600);
-             cy.get("button", { timeout: 26000 }).eq(2).click();
-           });
-         });
-         cy.visit("/account");
-       });
-     //})
+  const username = Cypress.env("GOOGLE_USER");
+  const password = Cypress.env("GOOGLE_PSWD");
+  const loginUrl = Cypress.env("SITE_NAME") + "/login";
+  const cookieName = Cypress.env("COOKIE_NAME");
+  const socialLoginOptions = {
+    username,
+    password,
+    loginUrl,
+    headless: true,
+    logs: true,
+    isPopup: false,
+    getAllBrowserCookies: true,
+    loginSelector: 'button',
+    cookieDelay: 200000,
+    postLoginSelector: "h1",
+  };
+  return cy
+    .task("GoogleSocialLogin", socialLoginOptions)
+    .then(({ cookies }) => {
+      cy.clearCookies();
+
+      const cookie = cookies
+        .filter((cookie) => cookie.name === cookieName)
+        .pop();
+     
+        if (cookie) {
+          cy.session('login',()=>{
+            cy.setCookie(cookie.name, cookie.value, {
+              domain: cookie.domain,
+              expiry: cookie.expires,
+              httpOnly: cookie.httpOnly,
+              path: cookie.path,
+              secure: cookie.secure,
+            });
+          })
+        }
+      
+    })
+    .then(() => {
+      cy.visit("/account");
+    }); 
 });
 
 ```
-Note that I have commented the `cy.session()` so if you remove that comment the cypress stuff will crash on the cypress browser.This is the error:
-
-<img src="https://github.com/leo-appsky/e2e-auth2-next-auth-example/blob/main/screenshots/error.png" alt="Next-Auth Error"/>
-
-So the big question here is how to fix oauth_callback_error when it says `id_token not present in TokenSet` on Google Provider?
+Note if you remove the `cy.session()` line you can pass the Gmail Authentications form but the session dont persist.
+So the big question here is how to save and persist an user session using Google Provider?

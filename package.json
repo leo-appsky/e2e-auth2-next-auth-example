@@ -11,7 +11,6 @@
     "cypress": "cypress run"
   },
   "dependencies": {
-    "cypress": "^12.7.0",
     "dotenv": "^16.0.3",
     "eslint": "8.35.0",
     "eslint-config-next": "13.2.3",
@@ -19,5 +18,10 @@
     "next-auth": "^4.18.7",
     "react": "18.2.0",
     "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/cypress": "^9.0.0",
+    "cypress": "^12.7.0",
+    "cypress-social-logins": "^1.14.0"
   }
 }

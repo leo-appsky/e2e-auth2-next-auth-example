@@ -7,7 +7,7 @@ const Login = () => {
     return (
       <>
         <h1>Welcome, {session.user?.email} to our dashboard</h1>
-        <button
+        <button id="btn_login"
           onClick={(ev) => {
             ev.preventDefault();
             signOut();
